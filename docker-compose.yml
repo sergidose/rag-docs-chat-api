@@ -1,0 +1,12 @@
+﻿services:
+  api:
+    build: .
+    ports:
+      - "8003:8000"
+    environment:
+      - PORT=8000
+      - DATA_DIR=/app/data/raw
+      - INDEX_PATH=/app/models/rag_index.joblib
+      - PYTHONPATH=/app
+    volumes:
+      - ./models:/app/models
