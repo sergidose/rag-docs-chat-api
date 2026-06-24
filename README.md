@@ -1,238 +1,280 @@
-# 🤖 rag-docs-chat-api
+# RAG Docs Chat API
 
-API de preguntas y respuestas sobre documentación utilizando un enfoque **RAG extractivo sin LLM**, basada en FastAPI y recuperación de información con TF-IDF.
+[![CI](https://github.com/sergidose/rag-docs-chat-api/actions/workflows/ci.yml/badge.svg)](https://github.com/sergidose/rag-docs-chat-api/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/)
+[![Claude](https://img.shields.io/badge/Claude-Haiku-orange)](https://anthropic.com/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-black)](https://github.com/astral-sh/ruff)
 
-El sistema permite indexar documentos en texto plano o Markdown y responder preguntas devolviendo fragmentos relevantes como respuesta.
-
----
-
-## 🚀 Características
-
-- API REST desarrollada con **FastAPI**
-- Recuperación de información mediante **TF-IDF**
-- Soporte para documentos `.md` y `.txt`
-- Endpoint para ingesta dinámica de documentos
-- Respuestas extractivas (sin modelos generativos)
-- Dockerizado y listo para despliegue
-- Tests automatizados con **pytest**
-- Calidad de código con **ruff** y **pre-commit**
+> A production-ready REST API that turns your Markdown and text documentation into an intelligent Q&A system — powered by TF-IDF retrieval with **optional LLM-powered generation via Claude**.
 
 ---
 
-## 🧩 Arquitectura
+## Overview
 
-Flujo general de la aplicación:
+Drop your `.md` or `.txt` files into `data/raw/`, call `POST /ingest`, and your documentation becomes queryable in seconds. The `/chat` endpoint retrieves the most relevant chunks and — when an Anthropic API key is configured — synthesises a fluent answer using **Claude Haiku**. Without the key it falls back gracefully to fast extractive mode.
 
-1. Se cargan documentos desde `data/raw`
-2. Se dividen en fragmentos (chunks)
-3. Se construye un índice TF-IDF
-4. Las consultas se comparan contra ese índice
-5. Se devuelve el fragmento más relevante como respuesta
-
-Este proyecto implementa un RAG **ligero y determinista**, ideal para:
-
-- FAQs
-- Documentación interna
-- Sistemas de ayuda
-- Bases de conocimiento pequeñas o medianas
+```
+POST /ingest   →  builds a TF-IDF index from your docs
+POST /chat     →  retrieves top-K chunks + generates (or extracts) an answer
+```
 
 ---
 
-## 📁 Estructura del proyecto
+## Architecture
 
-rag-docs-chat-api/
-├── app/
-│ └── main.py # Punto de entrada de FastAPI
-├── src/
-│ ├── init.py
-│ ├── chunking.py # División de textos en fragmentos
-│ ├── config.py # Configuración general
-│ ├── docs.py # Carga de documentos
-│ ├── index.py # Construcción y guardado del índice
-│ ├── markdown.py # Utilidades para procesar Markdown
-│ ├── rag.py # Lógica principal de preguntas
-│ └── retriever.py # Implementación TF-IDF
-├── data/
-│ └── raw/ # Documentos a indexar
-├── models/
-│ └── rag_index.joblib # Índice generado (tras ingest)
-├── scripts/
-│ └── start_api.py # Script de arranque
-├── tests/ # Tests automatizados
-├── Dockerfile
-├── docker-compose.yml
-├── pyproject.toml
-├── requirements.txt
-├── requirements-dev.txt
-└── README.md
+```mermaid
+flowchart TD
+    Client([Client]) -->|POST /ingest| Ingest[Ingest Endpoint]
+    Client -->|POST /chat| Chat[Chat Endpoint]
 
----
+    Ingest -->|scan .md/.txt| Loader[Document Loader]
+    Loader -->|split H2 sections| Chunker[Word Chunker\nsize=120 overlap=30]
+    Chunker -->|TF-IDF fit_transform| Index[(TF-IDF Matrix\nsklearn)]
+    Index -->|joblib.dump| Disk[(models/rag_index.joblib)]
 
-## 🔧 Instalación y ejecución
+    Chat -->|joblib.load| Index
+    Chat -->|question| Retriever[TF-IDF Retriever\ncosine similarity]
+    Retriever -->|top-K chunks| RAG[RAG Engine]
 
-### Requisitos
+    RAG -->|ANTHROPIC_API_KEY set?| LLM{LLM\nAvailable?}
+    LLM -- yes --> Claude[Claude Haiku\nclaude-haiku-4-5]
+    LLM -- no --> Extractive[Extractive\nFallback]
+    Claude -->|generated answer| Response[ChatOut]
+    Extractive -->|top-1 sentences| Response
 
-- Python 3.10 o superior
-- Docker (opcional)
+    Response --> Client
+
+    style Claude fill:#f97316,color:#fff
+    style Disk fill:#1e40af,color:#fff
+    style Index fill:#1e40af,color:#fff
+```
 
 ---
 
-### ▶ Ejecución local
+## Features
 
-Clonar el proyecto y crear entorno:
+| Feature | Details |
+|---|---|
+| **Dual-mode RAG** | LLM generation (Claude) with extractive fallback |
+| **Semantic chunking** | H2-section-aware splitting with configurable word overlap |
+| **Auto OpenAPI docs** | Swagger UI at `/docs`, ReDoc at `/redoc` |
+| **API key auth** | Protect `/ingest` with `X-Api-Key` header |
+| **Rate limiting** | 30 req/min on `/chat` via slowapi |
+| **CORS** | Configurable allowed origins |
+| **Structured logging** | ISO timestamps, level-tagged, LOG_LEVEL env var |
+| **Docker + Compose** | Health-checked container, named volume for the index |
+| **CI/CD** | GitHub Actions: lint → test (Py 3.10 & 3.12) → Docker build + smoke |
+| **Test suite** | Unit + integration tests, `pytest-cov`, 60%+ coverage gate |
 
-```powershell
+---
+
+## Quick Start
+
+### Docker (recommended)
+
+```bash
+# 1. Copy environment template
+cp .env.example .env
+
+# 2. Add your docs
+cp your-docs/*.md data/raw/
+
+# 3. Start
+docker compose up --build
+
+# 4. Index your docs
+curl -X POST http://localhost:8000/ingest
+
+# 5. Ask a question
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What is the returns policy?"}'
+```
+
+### Local
+
+```bash
 python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-```
-
----
-
-### Instalar el proyecto en modo editable (recomendado):
-
-```powershell
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt -r requirements-dev.txt
 pip install -e .
-```
 
----
-
-### Iniciar la API
-
-```powershell
+cp .env.example .env             # edit as needed
 uvicorn app.main:app --reload
 ```
 
-La documentación Swagger estará disponible en:
-
-👉 http://localhost:8000/docs
-
+> Swagger UI → http://localhost:8000/docs
 
 ---
 
-## 🐳 Ejecución con Docker
+## API Reference
 
-```bash
-docker compose up --build
+### `GET /health`
+
+Liveness check.
+
+```json
+{ "status": "ok" }
 ```
 
-La API quedará accesible en:
-
-👉 http://localhost:8000/docs
-
 ---
 
-## 📥 Ingestar documentos
+### `GET /index-info`
 
-Antes de poder hacer preguntas es necesario indexar los documentos.
-
-Endpoint
-POST /ingest
-
-Ejemplo con curl:
-
-``` bash
-curl -X POST http://localhost:8000/ingest
-```
-
-Esto realiza:
-
-- Lectura de los archivos en data/raw
-
-- Creación del índice TF-IDF
-
-- Guardado del índice en models/
-
----
-
-## ❓ Realizar preguntas
-
-Endpoint
-POST /chat
-
-Ejemplo de petición:
+Returns metadata about the loaded index.
 
 ```json
 {
-  "question": "¿Qué planes tenéis?"
+  "loaded": true,
+  "retriever_type": "tfidf",
+  "n_docs": 5,
+  "n_chunks": 42,
+  "created_at_utc": "2026-06-24T10:00:00+00:00"
 }
 ```
 
-Ejemplo de respuesta:
+---
+
+### `POST /ingest`
+
+Scans `DATA_DIR` for `.md` / `.txt` files, builds the TF-IDF index and persists it.
+Protected by `X-Api-Key` when `API_KEY` is set.
+
+```bash
+curl -X POST http://localhost:8000/ingest \
+  -H "X-Api-Key: your-secret-key"
+```
 
 ```json
 {
-  "answer": "Plan Basic, Pro y Enterprise.",
+  "retriever_type": "tfidf",
+  "n_docs": 5,
+  "n_chunks": 42,
+  "created_at_utc": "2026-06-24T10:00:00+00:00"
+}
+```
+
+---
+
+### `POST /chat`
+
+Query the indexed documentation.
+
+**Request**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `question` | string | — | 2–500 characters |
+| `top_k` | integer | 5 | 1–20 chunks to retrieve |
+
+```bash
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"question": "How many days do I have to return an item?", "top_k": 3}'
+```
+
+**Response**
+
+```json
+{
+  "answer": "You can request a return within 30 days of purchase.",
+  "mode": "llm",
   "sources": [
     {
       "source": "faq.md",
-      "chunk_id": 1,
-      "score": 0.33,
-      "snippet": "Planes Plan Basic, Pro y Enterprise."
+      "section": "Returns Policy",
+      "chunk_id": 2,
+      "score": 0.87,
+      "snippet": "You can request a return within 30 days of purchase. Contact…"
     }
   ]
 }
 ```
 
-## 🧪 Ejecución de tests
-
-Para ejecutar los tests:
-
-```powershell
-pytest -q
-```
-
-Con cobretura:
-
-```powershell
-pytest --cov=src
-```
+`mode` is `"llm"` when Claude generated the answer, `"extractive"` otherwise.
 
 ---
 
-## 🛠 Calidad de código
+## Configuration
 
-Este proyecto utiliza:
+All settings are read from environment variables (or `.env`). See `.env.example` for the full reference.
 
-- ruff para linting y formateo
+| Variable | Default | Description |
+|---|---|---|
+| `DATA_DIR` | `data/raw` | Directory scanned for documents |
+| `MODELS_DIR` | `models` | Where the index is saved |
+| `CHUNK_SIZE` | `120` | Words per chunk |
+| `CHUNK_OVERLAP` | `30` | Word overlap between chunks |
+| `TOP_K_DEFAULT` | `5` | Default chunks returned by `/chat` |
+| `PORT` | `8000` | API server port |
+| `LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` |
+| `CORS_ORIGINS` | `*` | Comma-separated allowed origins |
+| `API_KEY` | *(unset)* | When set, protects `POST /ingest` |
+| `ANTHROPIC_API_KEY` | *(unset)* | Enables Claude-powered answers |
 
-- pre-commit para validaciones automáticas
+---
 
-Instalar hooks:
+## Development
 
 ```bash
+# Lint
+ruff check .
+
+# Tests
+pytest -q
+
+# Tests with coverage report
+pytest --cov=src --cov=app --cov-report=term-missing
+
+# Install git hooks
 pre-commit install
 ```
 
-Verificar calidad manualmente:
+### Project layout
 
-```bash
-ruff check .
+```
+rag-docs-chat-api/
+├── app/
+│   └── main.py          # FastAPI app — endpoints, middleware, lifespan
+├── src/
+│   ├── auth.py          # X-Api-Key dependency
+│   ├── chunking.py      # Word-based chunker with overlap
+│   ├── config.py        # Environment variables
+│   ├── docs.py          # Document discovery & loading
+│   ├── index.py         # Build / save / load TF-IDF index
+│   ├── llm.py           # Claude API integration
+│   ├── logger.py        # Structured logging setup
+│   ├── markdown.py      # H2-section splitter
+│   ├── rag.py           # Retrieval + answer synthesis
+│   └── retriever.py     # TfidfRetriever (sklearn)
+├── tests/
+│   ├── conftest.py      # Shared fixtures & sample docs
+│   ├── test_api.py      # Integration tests (all endpoints)
+│   ├── test_chunking.py # Unit tests — chunker
+│   ├── test_rag_unit.py # Unit tests — RAG engine
+│   └── test_sanity.py   # Config sanity checks
+├── data/raw/            # Your documentation goes here
+├── models/              # Generated index (git-ignored)
+├── scripts/
+│   └── start_api.py     # Entry point: auto-ingest + uvicorn
+├── .github/workflows/
+│   └── ci.yml           # CI: lint → test → Docker build & smoke
+├── Dockerfile
+├── docker-compose.yml
+└── .env.example
 ```
 
 ---
 
-## 📌 Limitaciones actuales
+## Extending the Retriever
 
-- No utiliza modelos de lenguaje (LLM)
-
-- Respuestas estrictamente extractivas
-
-- No hay embeddings semánticos
-
-- El contexto se limita a los textos indexados
+The `TfidfRetriever` in [src/retriever.py](src/retriever.py) follows a simple interface (`build(texts)` / `query(text, k)`). Swap it for a dense retriever (FAISS + sentence-transformers, OpenAI embeddings, etc.) without touching the rest of the codebase.
 
 ---
 
-## 🚧 Posibles mejoras futuras
+## License
 
-- Incorporar búsqueda con embeddings
-
-- Re-ranking de resultados
-
-- Soporte para PDFs
-
-- Respuestas generativas con un LLM
-
-- Interfaz web sencilla
+MIT © [Sergi Dose](https://github.com/sergidose)

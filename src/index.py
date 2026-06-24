@@ -16,8 +16,8 @@ from src.config import (
     RETRIEVER,
 )
 from src.docs import load_documents
-from src.retriever import TfidfRetriever
 from src.markdown import split_markdown_by_h2
+from src.retriever import TfidfRetriever
 
 
 def build_index(
@@ -113,9 +113,7 @@ def main() -> None:
     idx = build_index(args.data_dir, args.retriever, args.chunk_size, args.overlap)
     save_index(idx, args.index_path)
     print(f"✅ Index saved to {args.index_path}")
-    print(
-        f"Docs: {idx['n_docs']} | Chunks: {idx['n_chunks']} | Retriever: {idx['retriever_type']}"
-    )
+    print(f"Docs: {idx['n_docs']} | Chunks: {idx['n_chunks']} | Retriever: {idx['retriever_type']}")
 
 
 if __name__ == "__main__":

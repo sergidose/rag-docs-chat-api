@@ -16,3 +16,6 @@ CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "30"))
 
 TOP_K_DEFAULT = int(os.getenv("TOP_K_DEFAULT", "5"))
 PORT = int(os.getenv("PORT", "8000"))
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+CORS_ORIGINS: list[str] = os.getenv("CORS_ORIGINS", "*").split(",")

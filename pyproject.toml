@@ -1,11 +1,36 @@
 [project]
 name = "rag-docs-chat-api"
-version = "0.1.0"
+version = "1.0.0"
+description = "RAG API for document Q&A — TF-IDF retrieval + optional Claude-powered generation"
+readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.10"
+authors = [{ name = "Sergi Dose", email = "sergi.dose@gmail.com" }]
+keywords = ["rag", "nlp", "fastapi", "tfidf", "llm", "claude"]
 
 [tool.setuptools]
-package-dir = {"" = "."}
+package-dir = { "" = "." }
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["src*", "app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["src", "app"]
+omit = ["*/__pycache__/*"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 60
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
