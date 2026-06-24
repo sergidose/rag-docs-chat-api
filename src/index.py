@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import joblib
@@ -76,7 +76,7 @@ def build_index(
         "retriever_type": retriever_type,
         "retriever": retriever,
         "chunks": chunks,
-        "created_at_utc": datetime.now(UTC).isoformat(),
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "n_docs": len(docs),
         "n_chunks": len(chunks),
     }
